@@ -3,17 +3,20 @@
 #include <ESP8266WebServer.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
+#include <ArduinoJson.h>
+#include <FS.h>
 
 const char* ssid = "***";
 const char* password = "***";
 
 void handlePostRoot();
 void handleGetTime();
+void handleGetSpec();
+void handlePutSpec();
 void handle404();
 void updateTime();
 
 ESP8266WebServer server(80);
-
 WiFiUDP ntpUDP;
 
 unsigned long timeLastUpdated = 0;
@@ -35,11 +38,15 @@ void setup() {
 
   server.on("/", HTTP_POST, handlePostRoot);
   server.on("/time", HTTP_GET, handleGetTime);
+  server.on("/spec", HTTP_GET, handleGetSpec);
+  server.on("/spec", HTTP_PUT, handlePutSpec);
   server.onNotFound(handle404);
 
   server.begin();
 
   timeClient.update();
+
+  SPIFFS.begin();
 }
 
 void loop() {
@@ -61,7 +68,39 @@ void handlePostRoot() {
 }
 
 void handleGetTime() {
-  server.send(200, "text/html", String(timeClient.getEpochTime()));
+  StaticJsonDocument<48> doc;
+
+  doc["time"] = timeClient.getEpochTime();
+
+  String output;
+
+  serializeJsonPretty(doc, output);
+  server.send(200, "application/json", output);
+}
+
+void handlePutSpec() {
+  SPIFFS.remove("spec.json");
+
+  File file = SPIFFS.open("spec.json", "w");
+  file.print(server.arg("plain"));
+
+  file.close();
+
+  server.send(200, "application/json", server.arg("plain"));
+}
+
+void handleGetSpec() {
+  File file = SPIFFS.open("spec.json", "r");
+
+  String output;
+
+  while (file.available()) {
+    output += char(file.read());
+  }
+
+  file.close();
+
+  server.send(200, "application/json", output);
 }
 
 void handle404() {
