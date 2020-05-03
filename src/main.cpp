@@ -1,14 +1,24 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 
 const char* ssid = "***";
 const char* password = "***";
 
 void handlePostRoot();
+void handleGetTime();
 void handle404();
+void updateTime();
 
 ESP8266WebServer server(80);
+
+WiFiUDP ntpUDP;
+
+unsigned long timeLastUpdated = 0;
+
+NTPClient timeClient(ntpUDP, "europe.pool.ntp.org");
 
 void setup() {
   pinMode(2, OUTPUT);
@@ -24,13 +34,18 @@ void setup() {
   }
 
   server.on("/", HTTP_POST, handlePostRoot);
+  server.on("/time", HTTP_GET, handleGetTime);
   server.onNotFound(handle404);
 
   server.begin();
+
+  timeClient.update();
 }
 
 void loop() {
   server.handleClient();
+
+  updateTime();
 }
 
 void handlePostRoot() {
@@ -45,6 +60,18 @@ void handlePostRoot() {
   server.send(200, "text/html", status);
 }
 
+void handleGetTime() {
+  server.send(200, "text/html", String(timeClient.getEpochTime()));
+}
+
 void handle404() {
   server.send(404, "text/html", "Not found");
+}
+
+void updateTime() {
+  if (millis() - timeLastUpdated > 60000) {
+    timeClient.update();
+
+    timeLastUpdated = millis();
+  }
 }
